@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model card_sets {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String           @db.VarChar(100)
+  is_default        Boolean?         @default(false)
+  unlockable_set_id String?          @db.Uuid
+  unlockable_sets   unlockable_sets? @relation(fields: [unlockable_set_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cards             cards[]
+  rooms             rooms[]
+}
+
+model cards {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  set_id              String                @db.Uuid
+  image_url           String
+  card_sets           card_sets             @relation(fields: [set_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  player_card_history player_card_history[]
+  player_hands        player_hands[]
+  round_submissions   round_submissions[]
+  rounds              rounds[]
+}
+
+model game_scores {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  game_id      String       @db.Uuid
+  player_id    String       @db.Uuid
+  score        Int?         @default(0)
+  rank         Int?
+  updated_at   DateTime?    @default(now()) @db.Timestamp(6)
+  games        games        @relation(fields: [game_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  room_players room_players @relation(fields: [player_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([game_id, player_id])
+}
+
+model games {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id             String                @db.Uuid
+  current_round       Int?                  @default(0)
+  status              String?               @default("active") @db.VarChar(20)
+  started_at          DateTime?             @default(now()) @db.Timestamp(6)
+  ended_at            DateTime?             @db.Timestamp(6)
+  game_scores         game_scores[]
+  rooms               rooms                 @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  player_card_history player_card_history[]
+  player_hands        player_hands[]
+  rounds              rounds[]
+}
+
+model player_card_history {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  game_id      String       @db.Uuid
+  player_id    String       @db.Uuid
+  card_id      String       @db.Uuid
+  used_at      DateTime?    @default(now()) @db.Timestamp(6)
+  cards        cards        @relation(fields: [card_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  games        games        @relation(fields: [game_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  room_players room_players @relation(fields: [player_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model player_hands {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  game_id      String       @db.Uuid
+  player_id    String       @db.Uuid
+  card_id      String       @db.Uuid
+  cards        cards        @relation(fields: [card_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  games        games        @relation(fields: [game_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  room_players room_players @relation(fields: [player_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([game_id, player_id, card_id])
+}
+
+model room_players {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id             String                @db.Uuid
+  user_id             String?               @db.Uuid
+  is_bot              Boolean?              @default(false)
+  bot_difficulty      String?               @db.VarChar(20)
+  joined_at           DateTime?             @default(now()) @db.Timestamp(6)
+  game_scores         game_scores[]
+  player_card_history player_card_history[]
+  player_hands        player_hands[]
+  rooms               rooms                 @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  round_submissions   round_submissions[]
+  round_votes         round_votes[]
+  rounds              rounds[]
+}
+
+model rooms {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  host_user_id  String         @db.Uuid
+  active_set_id String?        @db.Uuid
+  max_players   Int?           @default(6)
+  end_condition String?        @default("points") @db.VarChar(20)
+  point_limit   Int?           @default(30)
+  round_limit   Int?
+  status        String?        @default("waiting") @db.VarChar(20)
+  created_at    DateTime?      @default(now()) @db.Timestamp(6)
+  games         games[]
+  room_players  room_players[]
+  card_sets     card_sets?     @relation(fields: [active_set_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users          @relation(fields: [host_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model round_submissions {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  round_id         String        @db.Uuid
+  player_id        String        @db.Uuid
+  card_id          String        @db.Uuid
+  is_narrator_card Boolean?      @default(false)
+  submitted_at     DateTime?     @default(now()) @db.Timestamp(6)
+  cards            cards         @relation(fields: [card_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room_players     room_players  @relation(fields: [player_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rounds           rounds        @relation(fields: [round_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  round_votes      round_votes[]
+}
+
+model round_votes {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  round_id            String            @db.Uuid
+  voter_player_id     String            @db.Uuid
+  voted_submission_id String            @db.Uuid
+  voted_at            DateTime?         @default(now()) @db.Timestamp(6)
+  rounds              rounds            @relation(fields: [round_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  round_submissions   round_submissions @relation(fields: [voted_submission_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room_players        room_players      @relation(fields: [voter_player_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([round_id, voter_player_id])
+}
+
+model rounds {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  game_id            String              @db.Uuid
+  round_number       Int
+  narrator_player_id String?             @db.Uuid
+  narrator_card_id   String?             @db.Uuid
+  prompt             String?             @db.VarChar(200)
+  status             String?             @default("prompting") @db.VarChar(20)
+  started_at         DateTime?           @default(now()) @db.Timestamp(6)
+  round_submissions  round_submissions[]
+  round_votes        round_votes[]
+  games              games               @relation(fields: [game_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cards              cards?              @relation(fields: [narrator_card_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room_players       room_players?       @relation(fields: [narrator_player_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model unlockable_sets {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String         @db.VarChar(100)
+  unlock_condition String         @db.VarChar(50)
+  required_wins    Int?           @default(1)
+  card_sets        card_sets[]
+  user_unlocks     user_unlocks[]
+}
+
+model user_stats {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  games_played Int?      @default(0)
+  games_won    Int?      @default(0)
+  total_points Int?      @default(0)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model user_unlocks {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String          @db.Uuid
+  set_id          String          @db.Uuid
+  unlocked_at     DateTime?       @default(now()) @db.Timestamp(6)
+  unlockable_sets unlockable_sets @relation(fields: [set_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, set_id])
+}
+
+model users {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username      String         @unique @db.VarChar(50)
+  email         String         @unique @db.VarChar(255)
+  password_hash String
+  created_at    DateTime?      @default(now()) @db.Timestamp(6)
+  last_login_at DateTime?      @db.Timestamp(6)
+  room_players  room_players[]
+  rooms         rooms[]
+  user_stats    user_stats[]
+  user_unlocks  user_unlocks[]
+}
