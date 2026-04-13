@@ -22,17 +22,30 @@ app.use(cookieParser());
 app.use(express.static('public'));
 
 const server = createServer(app);
-const io = new Server(server, {
-    cors: { origin: '*' }
-}); // TODO: Configure CORS properly for production
+const io = new Server(server);
 
-io.on('connection', (socket) => {
-    console.log(`User connected via WebSocket: ${socket.id}`);
+io.use((socket, next) => {
+    try {
+        const cookies = cookie.parseCookie(socket.request.headers.cookie || "");
+        const token = cookies.token;
 
-    socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
-    });
+        if (!token)
+            return next(new Error('Brak tokena'));
+        const result = jwt.verify(token, process.env.JWT_SECRET);
+
+        socket.user = result;
+        next();
+    } catch (err) {
+        next(new Error('Niezalogowany'));
+    }
 });
+
+// TODO: Placeholder for game logic
+const gameHandler = (io, socket) => {
+    console.log(`Nowy gracz połączony. ID Gniazda: ${socket.id}`);
+};
+
+io.on('connection', (socket) => gameHandler(io, socket));
 
 const PORT = process.env.PORT || 3000;
 
