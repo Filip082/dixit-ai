@@ -1,6 +1,6 @@
 services:
   server:
-    image: node:20-alpine
+    image: node:25-alpine
     working_dir: /app
     ports:
       - "3000:3000"
@@ -15,7 +15,7 @@ services:
     command: sh -c "npm install && npx prisma generate && npm run dev"
 
   client:
-    image: node:20-alpine
+    image: node:25-alpine
     working_dir: /app
     ports:
       - "5173:5173"
