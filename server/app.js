@@ -7,17 +7,7 @@ const cookie = require('cookie');
 const jwt = require('jsonwebtoken');
 // const { createClient } = require('redis');
 
-const { PrismaClient } = require('@prisma/client');
-const { Pool } = require('pg');
-const { PrismaPg } = require('@prisma/adapter-pg');
-
-// const authRoutes = require('./routes/auth');
-
-// Initialize Prisma client (will connect to DB once schema is pulled via `npx prisma db pull`)
-const connectionString = process.env.DATABASE_URL;
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+//const authRoutes = require('./routes/auth');
 
 // Initialize Redis client (uncomment when Redis server is available)
 // const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
@@ -57,7 +47,7 @@ async function startServer() {
         });
     } catch (error) {
         console.error('Failed to start server:', error);
-        await prisma.$disconnect();
+        // await prisma.$disconnect();
         process.exit(1);
     }
 }
