@@ -1,19 +1,16 @@
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
-const { Pool } = require('pg');
-const { PrismaPg } = require('@prisma/adapter-pg');
 
-const connectionString = process.env.DATABASE_URL;
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+// Inicjalizacja natywnego klienta Prisma (bez zbędnych adapterów)
+const prisma = new PrismaClient();
 
-pool.query('SELECT NOW()', (err, res) => {
-    if (err) {
+// Test połączenia z AWS przy starcie serwera
+prisma.$queryRaw`SELECT NOW()`
+    .then((res) => {
+        console.log('✅ Połączono z bazą danych AWS. Czas serwera DB:', res[0].now);
+    })
+    .catch((err) => {
         console.error('❌ Błąd połączenia z bazą danych PostgreSQL:', err.message);
-    } else {
-        console.log('✅ Połączono z bazą danych. Czas serwera DB:', res.rows[0].now);
-    }
-});
+    });
 
 module.exports = prisma;
