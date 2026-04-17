@@ -4,15 +4,16 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
-const auth = require('../middleware/auth'); // Oczekuje middleware w tym miejscu
+const auth = require('../middleware/auth');
 
 const saltRounds = 10;
 
 router.post('/register', async (req, res) => {
-    // Pobieramy login, hasło oraz opcjonalnie email
-    const { login, password, email } = req.body; 
+    // 1. NAPRAWA REJESTRACJI: Pobieramy 'username' wysyłane przez front, lub fallbackowo 'login'
+    const { username, login, password, email } = req.body; 
+    const finalUsername = username || login;
 
-    if (!login || !password) {
+    if (!finalUsername || !password) {
         return res.status(400).json({ error: "Brak loginu lub hasła" });
     }
 
@@ -20,11 +21,11 @@ router.post('/register', async (req, res) => {
         const hash = await bcrypt.hash(password, saltRounds);
         
         // Prisma wymaga unikalnego emaila. Jeśli frontend go nie przesyła, generujemy placeholder
-        const userEmail = email || `${login}@placeholder.dixit-ai.com`;
+        const userEmail = email || `${finalUsername}@placeholder.dixit-ai.com`;
 
         const newUser = await prisma.users.create({
             data: {
-                username: login,
+                username: finalUsername,
                 email: userEmail,
                 password_hash: hash
             }
@@ -34,7 +35,6 @@ router.post('/register', async (req, res) => {
         res.status(201).json({ response: 'Dodano gracza' });
     } catch (e) {
         console.error(e);
-        // Kod błędu Prismy przy naruszeniu unikalności (UNIQUE constraint)
         if (e.code === 'P2002') {
              return res.status(409).json({ error: "Użytkownik o takim loginie lub emailu już istnieje" });
         }
@@ -44,11 +44,22 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
     try {
-        const { login, password } = req.body; 
+        // 2. NAPRAWA LOGOWANIA: Front wysyła pole 'email' zawierające Nick LUB E-mail
+        const { email, login, password } = req.body; 
+        const identifier = email || login;
         
-        // Szukamy użytkownika po username
-        const user = await prisma.users.findUnique({
-            where: { username: login }
+        if (!identifier || !password) {
+            return res.status(400).json({ error: "Brak danych logowania" });
+        }
+
+        // Szukamy użytkownika po username LUB emailu
+        const user = await prisma.users.findFirst({
+            where: {
+                OR: [
+                    { username: identifier },
+                    { email: identifier }
+                ]
+            }
         });
 
         if (!user) {
@@ -72,9 +83,16 @@ router.post('/login', async (req, res) => {
                 { expiresIn: '1w' }
             );
 
+            // 3. NAPRAWA ZUSTAND: Zwracamy obiekt `user` tak, jak oczekuje tego frontend
             return res.status(200)
                 .cookie('token', token, { httpOnly: true, sameSite: 'lax' }) 
-                .json({ response: "Zalogowany", username: user.username });
+                .json({ 
+                    response: "Zalogowany", 
+                    user: {
+                        id: user.id,
+                        username: user.username
+                    }
+                });
         }
         
         return res.status(401).json({ error: "Złe hasło" });
@@ -85,7 +103,6 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/me', auth, (req, res) => {
-    // req.user pochodzi z middleware 'auth'
     res.status(200).json({ username: req.user.login, id: req.user.id });
 });
 

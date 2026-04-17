@@ -1,0 +1,18 @@
+/* Najpierw wszystkie importy */
+@import "tailwindcss";
+@import "./fonts.css";
+@import "./theme.css";
+
+/* Dopiero potem dyrektywy @source i inne style */
+@source "../**/*.{js,ts,jsx,tsx}";
+@source "../../index.html";
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
