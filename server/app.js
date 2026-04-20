@@ -26,7 +26,7 @@ const io = new Server(server);
 
 io.use((socket, next) => {
     try {
-        const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+        const cookies = cookie.parseCookie(socket.request.headers.cookie || "");
         const token = cookies.token;
 
         if (!token)
