@@ -18,7 +18,7 @@ export default function App() {
       })
       .catch(err => console.error('Błąd pobierania profilu:', err));
 
-    // Lokalny "tick" licznika dla płynności UI (Happy Path)
+    // Lokalny "tick" licznika
     const interval = setInterval(() => {
       decrementTimer();
     }, 1000);
@@ -29,7 +29,7 @@ export default function App() {
       setGameState(data);
     });
 
-    // Obsługa błędów połączenia (opcjonalnie dla stabilności MVP)
+    // Obsługa błędów połączenia
     socket.on('connect_error', (err) => {
       console.error('Błąd połączenia Socket.io:', err.message);
     });
