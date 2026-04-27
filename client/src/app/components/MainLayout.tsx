@@ -38,7 +38,7 @@ export function MainLayout() {
         <Outlet />
       </main>
 
-      {/* Debug Panel - Niskie Opory Testing */}
+      {/* Debug Panel - Testing */}
       <div className="fixed bottom-4 right-4 z-[100] flex gap-2 p-2 bg-gray-900/90 rounded-2xl border border-gray-700 shadow-2xl backdrop-blur-md opacity-20 hover:opacity-100 transition-opacity">
         <div className="flex items-center px-3 border-r border-gray-700 text-orange-400">
           <Terminal size={16} />
