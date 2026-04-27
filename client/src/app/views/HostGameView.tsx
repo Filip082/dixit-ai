@@ -14,7 +14,7 @@ export function HostGameView() {
   const displayCode = roomId || "OCZEKIWANIE...";
 
   useEffect(() => {
-    // Symulacja: jeśli jesteśmy hostem i nie ma graczy, dodaj siebie (przyszłościowo obsłuży to socket)
+    // Symulacja: jeśli jesteśmy hostem i nie ma graczy, dodaj siebie
     if (lobbyPlayers.length === 0) {
       setLobbyPlayers([{ id: '1', name: 'Ty (Host)', isHost: true }]);
     }
