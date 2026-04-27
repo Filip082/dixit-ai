@@ -29,12 +29,12 @@ export function InstructionBox({ text }: { text: React.ReactNode }) {
   );
 }
 
-export function GameplayHeader({ seconds, roleText, instruction }: { seconds: number, roleText: string, instruction: React.ReactNode }) {
+export function GameplayHeader({ seconds, roleText, instruction, isAI }: { seconds: number, roleText: string, instruction: React.ReactNode, isAI?: boolean }) {
   return (
     <div className="w-full flex flex-col items-center">
       <div className="flex flex-col items-center gap-4 mt-6">
         <TimerBox seconds={seconds} />
-        <RoleBadge text={roleText} />
+        <RoleBadge text={isAI ? `${roleText} 🤖` : roleText} />
       </div>
       <InstructionBox text={instruction} />
     </div>
@@ -57,14 +57,21 @@ export function AssociationBox({ text }: { text: string }) {
 export function CardGrid({ 
   cards, 
   onSelect, 
-  selectedId 
+  selectedId,
+  layout = 'grid'
 }: { 
   cards: { id: string, image: string }[], 
   onSelect?: (id: string) => void,
-  selectedId?: string 
+  selectedId?: string,
+  layout?: 'grid' | 'row'
 }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl mx-auto px-4 mt-auto">
+    <div className={cn(
+      "w-full max-w-6xl mx-auto px-4 mt-auto",
+      layout === 'grid' 
+        ? "grid grid-cols-2 md:grid-cols-3 gap-6 max-w-4xl" 
+        : "flex flex-row overflow-x-auto gap-6 snap-x snap-mandatory pb-8 pt-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+    )}>
       {cards.map((card) => {
         const isSelected = selectedId === card.id;
         return (
@@ -72,8 +79,9 @@ export function CardGrid({
             key={card.id}
             onClick={() => onSelect && onSelect(card.id)}
             className={cn(
-              "relative aspect-square rounded-[2rem] overflow-hidden transition-all duration-300 transform",
-              onSelect ? "cursor-pointer hover:scale-105 hover:shadow-2xl" : "cursor-default",
+              "relative aspect-[2/3] rounded-[1.5rem] md:rounded-[2rem] overflow-hidden transition-all duration-300 transform shrink-0 snap-center",
+              layout === 'row' ? "w-48 md:w-56" : "w-full",
+              onSelect ? "cursor-pointer hover:-translate-y-2 hover:shadow-2xl" : "cursor-default",
               isSelected ? "scale-105 shadow-2xl ring-8 ring-orange-500 ring-offset-4 ring-offset-[#f3f4f6]" : "shadow-lg border border-gray-200"
             )}
           >

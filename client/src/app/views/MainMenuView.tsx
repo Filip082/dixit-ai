@@ -1,18 +1,28 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../components/Button';
-import { Swords, Users, BarChart3, Palette } from 'lucide-react';
+import { Swords, Users, BarChart3, Palette, LogOut } from 'lucide-react';
+import { useGameStore } from '../store/useGameStore';
 
 export function MainMenuView() {
   const navigate = useNavigate();
+  const me = useGameStore((state) => state.me);
 
   return (
     <div className="w-full max-w-lg mx-auto">
-      <div className="bg-white/80 backdrop-blur-xl border border-white/40 rounded-[2rem] shadow-2xl p-10 flex flex-col items-center gap-10">
+      <div className="bg-white/80 backdrop-blur-xl border border-white/40 rounded-[2rem] shadow-2xl p-10 flex flex-col items-center gap-10 relative overflow-hidden">
         
-        <div className="text-center space-y-2">
+        <button 
+          onClick={() => navigate('/')}
+          className="absolute top-8 left-8 text-gray-400 hover:text-gray-600 transition-colors flex items-center gap-2 text-sm font-semibold"
+        >
+          <LogOut size={18} />
+          {/* Wyloguj */}
+        </button>
+
+        <div className="text-center space-y-2 mt-4">
           <div className="inline-block px-4 py-1.5 bg-orange-100 text-orange-600 rounded-full font-bold text-sm mb-4">
-            Witaj z powrotem, PlayerOne!
+            Witaj z powrotem, {me?.username || 'Graczu'}!
           </div>
           <h1 className="text-5xl font-black text-gray-900 tracking-tight drop-shadow-sm">
             Dixit AI

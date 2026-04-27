@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Coins, Sparkles, Check } from 'lucide-react';
 import { Button } from '../components/Button';
+import { useGameStore } from '../store/useGameStore';
+import { socket } from '../services/socket';
 
 const THEMES = [
   { id: '1', name: 'Bajka', price: 0, preview: 'bg-gray-900', accent: 'bg-orange-500' },
@@ -12,19 +14,28 @@ const THEMES = [
 ];
 
 export function PersonalizationView() {
-  const [coins] = useState(450);
-  const [activeTheme, setActiveTheme] = useState('1');
-  const [ownedThemes, setOwnedThemes] = useState<string[]>(['1', '3']);
+  const me = useGameStore((state) => state.me);
+  
+  const coins = me?.coins || 0;
+  const activeThemeId = me?.activeThemeId || '1';
+  const ownedThemeIds = me?.ownedThemeIds || ['1'];
+
+  const handleBuy = (themeId: string) => {
+    socket.emit('buyTheme', { themeId });
+  };
+
+  const handleSelect = (themeId: string) => {
+    socket.emit('selectTheme', { themeId });
+  };
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-8 relative">
       <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 relative">
         <div className="text-center md:text-left space-y-2">
           <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            <Sparkles className="text-orange-500 hidden md:block" size={40} />
             Personalizacja
           </h1>
-          <p className="text-gray-600 font-medium text-lg">Wybierz zestawy tematyczne kart dostepnych podczas rozgrywki</p>
+          <p className="text-gray-600 font-medium text-lg">Wybierz zestawy tematyczne kart dostępne podczas rozgrywki</p>
         </div>
         
         <div className="bg-white/90 backdrop-blur-sm border-2 border-orange-200 rounded-2xl px-6 py-4 flex items-center gap-4 shadow-xl shadow-orange-500/10">
@@ -40,8 +51,8 @@ export function PersonalizationView() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
         {THEMES.map((theme) => {
-          const isOwned = ownedThemes.includes(theme.id);
-          const isActive = activeTheme === theme.id;
+          const isOwned = ownedThemeIds.includes(theme.id);
+          const isActive = activeThemeId === theme.id;
           const canAfford = coins >= theme.price;
 
           return (
@@ -51,9 +62,6 @@ export function PersonalizationView() {
             >
               <div className="w-full aspect-video rounded-2xl overflow-hidden relative mb-6 border border-gray-100 shadow-inner">
                 <div className={`absolute inset-0 ${theme.preview}`}></div>
-                {/* <div className={`absolute bottom-4 right-4 w-12 h-12 rounded-full ${theme.accent} shadow-lg border-2 border-white/20`}></div> */}
-                
-                {/* Abstract shapes in preview */}
                 <div className="absolute top-4 left-4 w-20 h-20 bg-white/10 rounded-full blur-md"></div>
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-black/10 rotate-45"></div>
               </div>
@@ -79,7 +87,7 @@ export function PersonalizationView() {
                   <Button 
                     variant="outline"
                     className="w-full"
-                    onClick={() => setActiveTheme(theme.id)}
+                    onClick={() => handleSelect(theme.id)}
                   >
                     Wybierz
                   </Button>
@@ -88,12 +96,7 @@ export function PersonalizationView() {
                     variant={canAfford ? 'primary' : 'secondary'}
                     className={`w-full ${!canAfford ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={!canAfford}
-                    onClick={() => {
-                      if (canAfford) {
-                        setOwnedThemes([...ownedThemes, theme.id]);
-                        // Would deduct coins here in real app
-                      }
-                    }}
+                    onClick={() => handleBuy(theme.id)}
                   >
                     {canAfford ? 'Kup Motyw' : 'Brak monet'}
                   </Button>

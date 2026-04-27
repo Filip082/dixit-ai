@@ -2,25 +2,23 @@ import React, { useState } from 'react';
 import { DoorOpen, ArrowRight, Users, Loader2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-
-const LOBBY_PLAYERS = [
-  { id: 1, name: 'PlayerOne', isHost: true },
-  { id: 2, name: 'AliceInWonder', isHost: false },
-  { id: 3, name: 'Ty', isHost: false },
-];
+import { socket } from '../services/socket';
+import { useGameStore } from '../store/useGameStore';
 
 export function JoinLobbyView() {
   const [code, setCode] = useState('');
-  const [joined, setJoined] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const { lobbyPlayers, roomId, me } = useGameStore();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (code.length === 6) {
-      setJoined(true);
+      socket.emit('joinRoom', { roomId: code });
+      setIsJoining(true);
     }
   };
 
-  if (joined) {
+  if (isJoining || roomId) {
     return (
       <div className="w-full max-w-md mx-auto px-4 py-8 relative">
         <div className="bg-white/95 backdrop-blur-xl border border-gray-100 rounded-[2.5rem] shadow-2xl p-8 md:p-12 space-y-8 transform transition-all duration-300">
@@ -29,7 +27,7 @@ export function JoinLobbyView() {
               <Loader2 size={32} className="animate-spin" />
             </div>
             <h1 className="text-3xl font-black text-gray-900 tracking-tight">
-              Poczekalnia: {code}
+              Poczekalnia: {roomId || code}
             </h1>
             <p className="text-gray-500 font-medium text-lg">
               Oczekiwanie na rozpoczęcie gry przez Hosta...
@@ -41,7 +39,7 @@ export function JoinLobbyView() {
               <Users size={20} className="text-gray-400" /> Dołączyli Gracze
             </h3>
             <div className="bg-white border border-gray-100 shadow-inner rounded-2xl p-2 space-y-2">
-              {LOBBY_PLAYERS.map(player => (
+              {lobbyPlayers.length > 0 ? lobbyPlayers.map(player => (
                 <div key={player.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center font-bold text-sm">
@@ -49,18 +47,20 @@ export function JoinLobbyView() {
                     </div>
                     <span className="font-bold text-gray-900">{player.name}</span>
                   </div>
-                  {player.name === 'Ty' && (
+                  {player.id === me?.id && (
                     <span className="text-xs font-bold bg-orange-500 text-white px-2 py-1 rounded-md uppercase tracking-wider">
                       To Ty
                     </span>
                   )}
-                  {player.isHost && player.name !== 'Ty' && (
+                  {player.isHost && player.id !== me?.id && (
                     <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-md uppercase">
                       Host
                     </span>
                   )}
                 </div>
-              ))}
+              )) : (
+                <p className="text-center py-4 text-gray-400 italic">Ładowanie listy graczy...</p>
+              )}
             </div>
           </div>
         </div>

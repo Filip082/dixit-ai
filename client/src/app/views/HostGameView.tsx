@@ -1,28 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Copy, Users, Flag, Trophy, Settings2, Play } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-
-const JOINED_PLAYERS = [
-  { id: 1, name: 'PlayerOne', isHost: true },
-  { id: 2, name: 'AliceInWonder', isHost: false },
-  { id: 3, name: 'BobTheBuilder', isHost: false },
-];
+import { socket } from '../services/socket';
+import { useGameStore } from '../store/useGameStore';
 
 export function HostGameView() {
-  const [players, setPlayers] = useState(4);
+  const { roomId, lobbyPlayers, setLobbyPlayers } = useGameStore();
+  const [maxPlayers, setMaxPlayers] = useState(4);
   const [endCondition, setEndCondition] = useState<'points' | 'rounds'>('points');
   const [endLimit, setEndLimit] = useState(30);
-  const lobbyCode = "A 9 X 2 F B";
+
+  const displayCode = roomId || "OCZEKIWANIE...";
+
+  useEffect(() => {
+    // Symulacja: jeśli jesteśmy hostem i nie ma graczy, dodaj siebie (przyszłościowo obsłuży to socket)
+    if (lobbyPlayers.length === 0) {
+      setLobbyPlayers([{ id: '1', name: 'Ty (Host)', isHost: true }]);
+    }
+  }, [lobbyPlayers.length, setLobbyPlayers]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(lobbyCode.replace(/ /g, ''));
+    if (roomId) navigator.clipboard.writeText(roomId);
   };
 
   return (
     <div className="w-full max-w-xl mx-auto px-4 py-8 relative">
       <div className="bg-white/95 backdrop-blur-xl border border-gray-100 rounded-[2.5rem] shadow-2xl p-8 md:p-12 space-y-10">
-        
+
         <div className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-gray-900 rounded-[1.5rem] flex items-center justify-center text-white mb-6 rotate-[-10deg] shadow-lg">
             <Settings2 size={32} className="text-orange-400" />
@@ -38,10 +43,11 @@ export function HostGameView() {
           <div className="absolute inset-0 bg-gradient-to-r from-orange-400/10 to-transparent pointer-events-none" />
           <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-2">Kod Lobby</p>
           <div className="flex justify-center items-center gap-4">
-            <span className="text-5xl font-black text-gray-900 tracking-[0.2em]">{lobbyCode}</span>
+            <span className="text-4xl md:text-5xl font-black text-gray-900 tracking-[0.2em]">{displayCode}</span>
             <button 
               onClick={handleCopy}
-              className="p-3 bg-white border border-orange-200 rounded-xl text-orange-600 hover:bg-orange-100 transition-colors shadow-sm active:scale-95"
+              disabled={!roomId}
+              className="p-3 bg-white border border-orange-200 rounded-xl text-orange-600 hover:bg-orange-100 transition-colors shadow-sm active:scale-95 disabled:opacity-50"
               title="Skopiuj kod"
             >
               <Copy size={24} />
@@ -58,15 +64,15 @@ export function HostGameView() {
                 Maksymalna liczba graczy
               </label>
               <span className="bg-gray-100 text-gray-900 px-4 py-1 rounded-full font-black text-xl">
-                {players}
+                {maxPlayers}
               </span>
             </div>
             <input 
               type="range" 
               min="3" 
               max="8" 
-              value={players}
-              onChange={(e) => setPlayers(parseInt(e.target.value))}
+              value={maxPlayers}
+              onChange={(e) => setMaxPlayers(parseInt(e.target.value))}
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500 hover:accent-orange-600"
             />
             <div className="flex justify-between text-xs font-bold text-gray-400">
@@ -106,7 +112,7 @@ export function HostGameView() {
                 <Flag size={18} /> Limit Rund
               </button>
             </div>
-            
+
             <div className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded-2xl">
               <span className="font-medium text-gray-700">
                 {endCondition === 'points' ? 'Wymagane punkty do wygranej:' : 'Liczba rund do zagrania:'}
@@ -123,10 +129,10 @@ export function HostGameView() {
           {/* Joined Players */}
           <div className="space-y-4">
             <label className="flex items-center gap-2 font-bold text-gray-900 text-lg">
-              Dołączyli Gracze ({JOINED_PLAYERS.length}/{players})
+              Dołączyli Gracze ({lobbyPlayers.length}/{maxPlayers})
             </label>
             <div className="bg-white border-2 border-gray-100 rounded-2xl p-2 space-y-2">
-              {JOINED_PLAYERS.map(player => (
+              {lobbyPlayers.map(player => (
                 <div key={player.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm">
@@ -141,7 +147,7 @@ export function HostGameView() {
                   )}
                 </div>
               ))}
-              {Array.from({ length: players - JOINED_PLAYERS.length }).map((_, i) => (
+              {Array.from({ length: Math.max(0, maxPlayers - lobbyPlayers.length) }).map((_, i) => (
                 <div key={`empty-${i}`} className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-gray-200">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
                     <div className="w-2 h-2 rounded-full bg-gray-300" />
@@ -153,7 +159,12 @@ export function HostGameView() {
           </div>
         </div>
 
-        <Button size="lg" className="w-full flex items-center justify-center gap-3 py-8 rounded-2xl text-xl shadow-xl shadow-orange-500/20">
+        <Button 
+          onClick={() => socket.emit('startGame', { maxPlayers, endCondition, endLimit })}
+          disabled={!roomId}
+          size="lg" 
+          className="w-full flex items-center justify-center gap-3 py-8 rounded-2xl text-xl shadow-xl shadow-orange-500/20"
+        >
           <Play className="fill-white" size={24} /> Rozpocznij Grę
         </Button>
       </div>

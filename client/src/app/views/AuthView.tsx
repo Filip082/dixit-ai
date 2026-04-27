@@ -82,7 +82,7 @@ export function AuthView() {
           <Input 
             className="pl-12" 
             type={isLogin ? "text" : "email"} 
-            placeholder={isLogin ? "Nick" : "E-Mail"} 
+            placeholder={isLogin ? "E-Mail / Nick" : "E-Mail"} 
             required 
             value={isLogin ? login : email}
             onChange={(e) => isLogin ? setLogin(e.target.value) : setEmail(e.target.value)}
