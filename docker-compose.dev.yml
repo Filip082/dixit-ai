@@ -22,4 +22,6 @@ services:
     volumes:
       - ./client:/app:z
       - /app/node_modules
+    environment:
+      - VITE_API_TARGET=http://server:3000
     command: sh -c "npm install && npm run dev -- --host"
