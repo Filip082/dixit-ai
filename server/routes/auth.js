@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth'); // Oczekuje middleware w tym miejscu
+const { fetchStatsForUser } = require('./users');
 
 const saltRounds = 10;
 
@@ -84,9 +85,35 @@ router.post('/login', async (req, res) => {
     }
 });
 
-router.get('/me', auth, (req, res) => {
-    // req.user pochodzi z middleware 'auth'
-    res.status(200).json({ username: req.user.login, id: req.user.id });
+router.get('/me', auth, async (req, res) => {
+    // req.user pochodzi z middleware 'auth'.
+    // Stare pola (id, username) zostają — istniejący klient main je czyta.
+    // Reszta to dodatkowe pola pod store Zustand z feature/frontend-refactor-zustand.
+    try {
+        const userRow = await prisma.users.findUnique({
+            where: { id: req.user.id },
+            include: {
+                user_unlocks: true,
+            },
+        });
+
+        const stats = await fetchStatsForUser(req.user.id);
+
+        return res.status(200).json({
+            id: req.user.id,
+            username: req.user.login,
+            email: userRow?.email || null,
+            // TODO: kolumny `coins` i `active_theme_id` na `users` wymagają zmiany schematu DB
+            // (cross-boundary) — póki co zwracamy placeholdery, żeby kontrakt z frontu nie pękał.
+            coins: 0,
+            activeThemeId: null,
+            ownedThemeIds: (userRow?.user_unlocks || []).map((u) => u.set_id),
+            stats,
+        });
+    } catch (err) {
+        console.error('GET /api/auth/me error:', err);
+        return res.status(500).json({ error: 'Błąd pobierania profilu' });
+    }
 });
 
 router.post('/logout', (req, res) => {
