@@ -1,5 +1,6 @@
 services:
   server:
+    image: ghcr.io/filip082/dixit-ai:latest
     build:
       context: .
       dockerfile: DOCKERFILE
@@ -15,6 +16,7 @@ services:
       - bot
 
   bot:
+    image: ghcr.io/filip082/dixit-ai-bot:latest
     build:
       context: bot
       dockerfile: Dockerfile
