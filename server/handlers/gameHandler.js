@@ -16,11 +16,14 @@ async function drawCards(tx, gameId, playerId, count) {
 
     const allCards = game.rooms.card_sets?.cards ?? [];
 
-    // Karty już w ręce gracza
-    const currentHand = await tx.player_hands.findMany({
-        where: { game_id: gameId, player_id: playerId }
+    // Karty w rękach WSZYSTKICH graczy tej gry (żadna karta nie może być u dwóch graczy naraz)
+    const allHands = await tx.player_hands.findMany({
+        where: { game_id: gameId }
     });
-    const inHand = new Set(currentHand.map(h => h.card_id));
+    const inAnyHand = new Set(allHands.map(h => h.card_id));
+
+    // Karty w ręce tego gracza (podzbiór inAnyHand, potrzebny do fallbacku)
+    const inMyHand = new Set(allHands.filter(h => h.player_id === playerId).map(h => h.card_id));
 
     // Karty użyte w historii tej gry przez tego gracza
     const history = await tx.player_card_history.findMany({
@@ -28,13 +31,18 @@ async function drawCards(tx, gameId, playerId, count) {
     });
     const inHistory = new Set(history.map(h => h.card_id));
 
-    // Preferuj karty których gracz nie widział jeszcze w tej grze
-    let available = allCards.filter(c => !inHand.has(c.id) && !inHistory.has(c.id));
+    // Preferuj karty których gracz nie widział i które nie są u nikogo w ręce
+    let available = allCards.filter(c => !inAnyHand.has(c.id) && !inHistory.has(c.id));
 
-    // Fallback: talia się skończyła — recykling kart (tylko nie te aktualnie w ręce)
+    // Fallback 1: wyczerpano nowe karty — pozwól na karty z historii, ale nie z czyjejś ręki
     if (available.length < count) {
-        console.log(`[DrawCards] pool exhausted for player ${playerId}, recycling deck`);
-        available = allCards.filter(c => !inHand.has(c.id));
+        available = allCards.filter(c => !inAnyHand.has(c.id));
+    }
+
+    // Fallback 2: wszystkie karty są w rękach — pozwól na karty z cudzych rąk (mała talia)
+    if (available.length < count) {
+        console.log(`[DrawCards] pool exhausted for player ${playerId}, recycling from other hands`);
+        available = allCards.filter(c => !inMyHand.has(c.id));
     }
 
     // Fisher-Yates shuffle
