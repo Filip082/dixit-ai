@@ -128,6 +128,5 @@ bower_components/
 
 # --- Wykluczenia lokalne ---
 docs/
-client/public/Karty/
 AGENTS.md
 terminal.txt

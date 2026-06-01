@@ -253,10 +253,12 @@ router.post('/start', auth, async (req, res) => {
                 const j = Math.floor(Math.random() * (i + 1));
                 [cardPool[i], cardPool[j]] = [cardPool[j], cardPool[i]];
             }
+            // Gdy kart za mało (np. 22 karty, 5 graczy × 6 = 30), rozdaj równo
+            const fairHandSize = Math.min(HAND_SIZE, Math.floor(allCards.length / players.length));
             const usedCardIds = new Set();
 
             for (const player of players) {
-                const hand = cardPool.filter(c => !usedCardIds.has(c.id)).slice(0, HAND_SIZE);
+                const hand = cardPool.filter(c => !usedCardIds.has(c.id)).slice(0, fairHandSize);
                 hand.forEach(c => usedCardIds.add(c.id));
 
                 for (const card of hand) {
