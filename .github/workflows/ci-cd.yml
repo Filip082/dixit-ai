@@ -13,6 +13,9 @@ env:
 jobs:
   ci:
     name: Build & Test
+    environment:
+      name: test
+      deployment: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
