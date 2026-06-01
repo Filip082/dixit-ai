@@ -31,7 +31,6 @@ RUN npm install
 COPY server/ .
 
 # Generujemy klienta Prisma (schemat jest w folderze prisma)
-RUN npx prisma db pull
 RUN npx prisma generate
 
 # Usuwamy devDependencies dla lżejszego obrazu produkcyjnego
