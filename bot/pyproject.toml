@@ -15,6 +15,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.4",
     "pydantic>=2.13.4",
     "python-multipart>=0.0.27",
+    "sentence-transformers>=5.5.1",
     "torch>=2.11.0",
     "torchvision>=0.26.0",
     "uvicorn[standard]>=0.46.0",
