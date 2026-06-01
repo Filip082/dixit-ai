@@ -26,8 +26,3 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-    volumes:
-      - bot-model:/app/model
-
-volumes:
-  bot-model:
