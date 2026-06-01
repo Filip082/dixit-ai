@@ -9,7 +9,7 @@ COPY . .
 RUN uv sync
 
 # Run setup.py to download the model
-RUN uv run src/setup.py
+RUN uv run python -m src.setup
 
 EXPOSE 8000
 
