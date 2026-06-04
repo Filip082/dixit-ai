@@ -4,16 +4,18 @@ import os
 
 from src.narrators import Narrator, GeminiNarrator
 from src.matchers import Matcher, SentenceTransformersMatcher, OpenClipMatcher
+from src.profilers import Profiler, ClipProfiler
 
 
 @dataclass(frozen=True)
 class BotConfig:
     narrator: str
     matcher: str
+    profiler: str
 
 @lru_cache(maxsize=1)
 def get_bot_config() -> BotConfig:
-    return BotConfig("gemini", "sentence_transformers")
+    return BotConfig("gemini", "sentence_transformers", "clip")
 
 
 @lru_cache(maxsize=1)
@@ -37,3 +39,11 @@ def get_matcher() -> Matcher:
         return OpenClipMatcher()
     
     raise RuntimeError("Invalid matcher config")
+
+@lru_cache(maxsize=1)
+def get_profiler() -> Profiler:
+    profiler = get_bot_config().profiler
+    if profiler == "clip":
+        return ClipProfiler()
+
+    raise RuntimeError("Invalid profiler config")

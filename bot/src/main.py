@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import binascii
-from typing import List, Optional
+from typing import List, Optional, Dict
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 import httpx
 
-from src.bot import get_narrator, get_matcher
+from src.bot import get_narrator, get_matcher, get_profiler
 from src.util import (
     _bytes_to_pil_image,
     _fetch_image_url_by_id,
@@ -39,6 +39,9 @@ class ChooseCardRequest(BaseModel):
         if bool(model.image_ids) == bool(model.images_b64):
             raise ValueError("Provide exactly one of 'image_ids' or 'images_b64'.")
         return model
+    
+class ProfileClueRequest(BaseModel):
+    clue: str = Field(min_length=1)
 
 class GeneratePromptResponse(BaseModel):
     clue: str
@@ -46,6 +49,9 @@ class GeneratePromptResponse(BaseModel):
 class ChooseCardResponse(BaseModel):
     best_index: int
     probabilities: List[float]
+
+class ProfileClueResponse(BaseModel):
+    attitude: Dict
 
 app = FastAPI(title="Dixit Bot API")
 
@@ -77,7 +83,7 @@ async def generate_prompt(lang: str, payload: GeneratePromptRequest) -> Generate
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return {"clue": clue}
+    return GeneratePromptResponse(clue=clue)
 
 @app.post("/choose-card", response_model=ChooseCardResponse)
 async def choose_card(payload: ChooseCardRequest) -> ChooseCardResponse:
@@ -121,4 +127,13 @@ async def choose_card(payload: ChooseCardRequest) -> ChooseCardResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to choose card: {exc}") from exc
 
-    return {"best_index": best_index, "probabilities": probabilities}
+    return ChooseCardResponse(best_index=best_index, probabilities=probabilities)
+
+@app.post("/profile-clue", response_model=ProfileClueResponse)
+async def profile_clue(payload: ProfileClueRequest) -> ProfileClueResponse:
+    clue = payload.clue.strip()
+    if not clue:
+        raise HTTPException(status_code=400, detail="clue is required.")
+    
+    attitude = get_profiler().profile_clue(clue)
+    return ProfileClueResponse(attitude=attitude)
