@@ -59,6 +59,12 @@ export function HostGameView() {
   };
 
   const handleCreateRoom = async () => {
+    if (endLimit < 1) {
+      setStartError(endCondition === 'points'
+        ? 'Wymagane punkty do wygranej muszą być co najmniej 1.'
+        : 'Liczba rund musi być co najmniej 1.');
+      return;
+    }
     setCreating(true);
     setStartError(null);
     try {
@@ -80,6 +86,12 @@ export function HostGameView() {
   const handleStartGame = async () => {
     setStartError(null);
     if (!hasRoom || !canStart) return;
+    if (endLimit < 1) {
+      setStartError(endCondition === 'points'
+        ? 'Wymagane punkty do wygranej muszą być co najmniej 1.'
+        : 'Liczba rund musi być co najmniej 1.');
+      return;
+    }
 
     setStarting(true);
     const settings = { maxPlayers, endCondition, endLimit };
@@ -215,11 +227,12 @@ export function HostGameView() {
               </span>
               <Input
                 type="number"
+                min={1}
                 value={endLimit}
                 onChange={(e) => {
-                const next = parseInt(e.target.value, 10);
-                setEndLimit(Number.isFinite(next) ? next : DEFAULT_LOBBY_SETTINGS.endLimit);
-              }}
+                  const next = parseInt(e.target.value, 10);
+                  setEndLimit(Number.isFinite(next) ? Math.max(1, next) : DEFAULT_LOBBY_SETTINGS.endLimit);
+                }}
                 className="w-24 text-center font-bold text-lg h-10"
               />
             </div>

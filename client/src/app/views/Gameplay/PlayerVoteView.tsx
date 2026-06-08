@@ -29,7 +29,7 @@ export function PlayerVoteView() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col items-center max-w-5xl mx-auto pb-6 px-2 md:pb-8">
+    <div className="w-full h-full flex flex-col items-center max-w-7xl mx-auto pb-6 px-2 md:pb-8">
       {ownCardError && (
         <p className="mb-4 rounded-xl bg-amber-50 px-4 py-2 text-center font-bold text-amber-700">
           Nie możesz głosować na własną kartę!

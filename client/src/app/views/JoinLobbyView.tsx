@@ -102,10 +102,10 @@ export function JoinLobbyView() {
           <Input
             autoFocus
             maxLength={6}
-            placeholder="np. A9X2FB"
+            placeholder="A9X2FB"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            className="h-20 text-center text-4xl font-black tracking-[0.5em] uppercase placeholder:text-gray-300 placeholder:font-black rounded-2xl border-2 shadow-inner"
+            className="h-20 text-center text-4xl font-black tracking-[0.5em] uppercase placeholder:text-2xl placeholder:tracking-[0.35em] placeholder:font-bold placeholder:text-gray-300 rounded-2xl border-2 shadow-inner"
           />
 
           <Button

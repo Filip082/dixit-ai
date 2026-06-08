@@ -176,7 +176,7 @@ export function PersonalizationView() {
                   </Button>
                 ) : (
                   <Button
-                    className="w-full"
+                    className={canAfford ? 'w-full' : 'w-full text-sm leading-tight px-3 min-h-12 h-auto py-2 whitespace-normal'}
                     disabled={!canAfford}
                     onClick={() => handleBuyTheme(theme.id, theme.price)}
                   >

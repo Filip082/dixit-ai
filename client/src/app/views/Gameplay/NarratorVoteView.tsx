@@ -11,7 +11,7 @@ export function NarratorVoteView() {
       : ['1', '2', '3', '4'].map((id) => ({ id: `placeholder-${id}` }));
 
   return (
-    <div className="w-full h-full flex flex-col items-center max-w-5xl mx-auto pb-8 px-2">
+    <div className="w-full h-full flex flex-col items-center max-w-7xl mx-auto pb-8 px-2">
       <GameplayHeader
         seconds={timer ?? 20}
         roleText="Stół w rundzie"
