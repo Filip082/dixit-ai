@@ -20,7 +20,7 @@ export function NarratorHandView() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col items-center max-w-5xl mx-auto pb-6 px-2 md:pb-8">
+    <div className="w-full h-full flex flex-col items-center max-w-7xl mx-auto pb-6 px-2 md:pb-8">
       {socketError && (
         <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-center font-bold text-red-600">{socketError}</p>
       )}

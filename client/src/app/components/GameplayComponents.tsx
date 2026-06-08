@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '@/app/components/ui/utils';
 import { GameCard } from './GameCard';
 
@@ -54,6 +54,36 @@ export function AssociationBox({ text }: { text: string }) {
   );
 }
 
+const MIN_CARD_WIDTH = 96;
+const HAND_MAX_WIDTH = 176;
+const TABLE_MAX_BY_COUNT: [number, number][] = [
+  [4, 200],
+  [6, 160],
+  [8, 128],
+];
+
+function getMaxCardWidth(variant: 'hand' | 'table', count: number) {
+  if (variant === 'hand') return HAND_MAX_WIDTH;
+  for (const [maxCount, maxWidth] of TABLE_MAX_BY_COUNT) {
+    if (count <= maxCount) return maxWidth;
+  }
+  return 128;
+}
+
+function computeCardWidth(
+  containerWidth: number,
+  count: number,
+  variant: 'hand' | 'table',
+  gap: number,
+) {
+  if (count === 0 || containerWidth <= 0) {
+    return variant === 'hand' ? 128 : 160;
+  }
+  const maxW = getMaxCardWidth(variant, count);
+  const available = containerWidth - gap * Math.max(0, count - 1);
+  return Math.max(MIN_CARD_WIDTH, Math.min(maxW, Math.floor(available / count)));
+}
+
 export function CardGrid({
   cards,
   onSelect,
@@ -62,7 +92,7 @@ export function CardGrid({
   disabled = false,
   variant = 'hand',
 }: {
-  cards: { id: string; image?: string }[];
+  cards: { id: string; image?: string; disabled?: boolean }[];
   onSelect?: (id: string) => void;
   selectedId?: string;
   faceDown?: boolean;
@@ -70,7 +100,27 @@ export function CardGrid({
   /** hand = przewijana ręka; table = karty na stole */
   variant?: 'hand' | 'table';
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cardWidth, setCardWidth] = useState<number>(() =>
+    computeCardWidth(0, cards.length, variant, variant === 'hand' ? 20 : 24),
+  );
+  const gap = variant === 'hand' ? 20 : 24;
   const selectable = !!onSelect && !disabled;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      setCardWidth(computeCardWidth(el.clientWidth, cards.length, variant, gap));
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [cards.length, variant, gap]);
+
   const inner = cards.map((card) => (
     <GameCard
       key={card.id}
@@ -78,18 +128,22 @@ export function CardGrid({
       imageUrl={card.image}
       isBack={faceDown}
       isSelected={selectedId === card.id}
-      isSelectable={selectable}
+      isSelectable={selectable && !card.disabled}
       onClick={() => onSelect?.(card.id)}
-      size={variant === 'table' ? 'md' : 'sm'}
-      className="shrink-0 md:shrink"
+      size="fluid"
+      width={cardWidth}
+      className={cn('shrink-0', card.disabled && 'opacity-40 cursor-not-allowed')}
     />
   ));
 
   if (variant === 'hand') {
     return (
-      <div className="w-full max-w-5xl mx-auto px-2 md:px-4 mt-auto mb-6">
+      <div className="w-full max-w-7xl mx-auto px-2 md:px-4 mt-auto mb-6">
         <div className="overflow-x-auto pb-3 -mx-2 px-2 md:overflow-visible md:pb-0">
-          <div className="flex flex-nowrap md:flex-wrap justify-center gap-3 md:gap-5 min-w-min mx-auto">
+          <div
+            ref={containerRef}
+            className="flex flex-nowrap md:flex-wrap justify-center gap-3 md:gap-5 w-full min-w-min mx-auto"
+          >
             {inner}
           </div>
         </div>
@@ -98,7 +152,10 @@ export function CardGrid({
   }
 
   return (
-    <div className="flex flex-wrap justify-center gap-4 md:gap-6 w-full max-w-5xl mx-auto px-4 mt-auto mb-8">
+    <div
+      ref={containerRef}
+      className="flex flex-wrap justify-center gap-4 md:gap-6 w-full max-w-7xl mx-auto px-4 mt-auto mb-8"
+    >
       {inner}
     </div>
   );

@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
-import { DoorOpen, Loader2 } from 'lucide-react';
+import { DoorOpen, Loader2, LogOut } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { useGameStore } from '../store/useGameStore';
 import { LobbyPlayerList } from '../components/LobbyPlayerList';
 import { joinLobby } from '../services/lobbyApi';
 import { notifyError } from '../services/socketNotify';
+import { useNavigate } from 'react-router';
+import { emitDisconnectFromGame } from '../services/gameSocket';
+import { socket } from '../services/socket';
 
 export function JoinLobbyView() {
-  const { players: storePlayers, roomCode: storeRoomCode, myId } = useGameStore();
+  const { players: storePlayers, roomCode: storeRoomCode, myId, resetGame } = useGameStore();
   const [code, setCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLeave = () => {
+    emitDisconnectFromGame();
+    if (socket.connected) socket.disconnect();
+    resetGame();
+    navigate('/menu');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +71,14 @@ export function JoinLobbyView() {
               </p>
             )}
           </div>
+
+          <Button
+            variant="outline"
+            onClick={handleLeave}
+            className="w-full flex items-center justify-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+          >
+            <LogOut size={18} /> Opuść poczekalnię
+          </Button>
         </div>
       </div>
     );
@@ -83,10 +102,10 @@ export function JoinLobbyView() {
           <Input
             autoFocus
             maxLength={6}
-            placeholder="np. A9X2FB"
+            placeholder="A9X2FB"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            className="h-20 text-center text-4xl font-black tracking-[0.5em] uppercase placeholder:text-gray-300 placeholder:font-black rounded-2xl border-2 shadow-inner"
+            className="h-20 text-center text-4xl font-black tracking-[0.5em] uppercase placeholder:text-2xl placeholder:tracking-[0.35em] placeholder:font-bold placeholder:text-gray-300 rounded-2xl border-2 shadow-inner"
           />
 
           <Button

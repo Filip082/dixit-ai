@@ -48,7 +48,7 @@ export function mapServerCard(raw: { id?: string | number; image_url?: string })
 }
 
 function mapTableCards(
-  items: Array<{ submission_id: string; card: { id?: string | number; image_url?: string } }>
+  items: Array<{ submission_id: string; player_id?: string; card: { id?: string | number; image_url?: string } }>
 ): TableCard[] {
   return items.map((item) => {
     const card = mapServerCard(item.card);
@@ -56,6 +56,7 @@ function mapTableCards(
       submissionId: String(item.submission_id),
       cardId: card.id,
       imageUrl: card.imageUrl,
+      playerId: item.player_id ? String(item.player_id) : undefined,
     };
   });
 }
@@ -119,19 +120,32 @@ export function registerGameSocketHandlers(sock: Socket) {
     });
   });
 
-  sock.on('new_round', () => {
+  sock.on('new_round', (payload: { narrator_player_id?: string; round_number?: number } = {}) => {
     get().setGameState({
       currentPhase: 'prompting',
       tableCards: [],
       narratorPrompt: null,
       lastRoundScores: {},
+      narratorId: payload?.narrator_player_id ? String(payload.narrator_player_id) : get().narratorId,
       socketError: null,
     });
   });
 
-  sock.on('game_over', () => {
+  sock.on('hand_updated', (payload: { hand: Array<{ id?: string | number; image_url?: string }> }) => {
+    get().setMyHand((payload.hand ?? []).map(mapServerCard));
+  });
+
+  sock.on('game_over', (payload: { scores?: Array<{ player_id: string; total_score: number }> } = {}) => {
+    const state = get();
+    const updatedPlayers = payload.scores && payload.scores.length > 0
+      ? state.players.map(p => {
+          const entry = payload.scores!.find(s => String(s.player_id) === String(p.id));
+          return entry ? { ...p, score: entry.total_score } : p;
+        })
+      : state.players;
     get().setGameState({
       currentPhase: 'ended',
+      players: updatedPlayers,
       socketError: null,
     });
   });

@@ -10,7 +10,9 @@ interface GameCardProps {
   isSelectable?: boolean;
   onClick?: () => void;
   className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'fluid';
+  /** Szerokość w px — używane z size="fluid" */
+  width?: number;
 }
 
 /**
@@ -26,6 +28,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   onClick,
   className,
   size = 'md',
+  width,
 }) => {
   const normalizedImageUrl = imageUrl?.startsWith('/Karty/') ? undefined : imageUrl;
   const finalSrc = isBack
@@ -38,15 +41,20 @@ export const GameCard: React.FC<GameCardProps> = ({
     md: 'w-32 h-48',
     lg: 'w-48 h-72',
     xl: 'w-64 h-96',
+    fluid: '',
   };
+
+  const isFluid = size === 'fluid' && width != null && width > 0;
 
   return (
     <div
       onClick={isSelectable ? onClick : undefined}
+      style={isFluid ? { width, height: width * 1.5 } : undefined}
       className={cn(
         'relative overflow-hidden rounded-xl transition-all duration-300 ease-in-out',
         'cursor-default shadow-md border-2 border-transparent',
-        sizeClasses[size],
+        !isFluid && sizeClasses[size],
+        isFluid && 'aspect-[2/3]',
         isSelectable && 'cursor-pointer hover:scale-[1.04] hover:shadow-xl hover:z-10 active:scale-[0.98]',
         !isSelectable && !isBack && 'hover:shadow-lg',
         isSelected && 'border-primary ring-4 ring-primary/30 scale-105 z-10',
