@@ -11,6 +11,7 @@ services:
       - .env
     environment:
       - NODE_ENV=development
+      - BOT_SERVICE_URL=http://bot:8000
 
     command: sh -c "npm install && npx prisma db pull && npx prisma generate && npm run dev"
 
@@ -41,7 +42,7 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-    command: sh -c "pip install uv && uv sync && uv run src/setup.py && uv run uvicorn src.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "pip install uv && uv sync && uv run python -m src.setup && uv run uvicorn src.main:app --host 0.0.0.0 --port 8000"
 
 
 volumes:

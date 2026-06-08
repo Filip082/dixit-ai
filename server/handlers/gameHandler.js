@@ -1,5 +1,7 @@
 const prisma = require('../config/db');
 const { calculateScores } = require('../lib/scoring');
+const { startPhaseTimer, clearPhaseTimer } = require('../lib/gameTimer');
+const botOrchestrator = require('../lib/botOrchestrator');
 
 const HAND_SIZE = 6; // docelowa liczba kart w ręce
 
@@ -14,21 +16,41 @@ async function drawCards(tx, gameId, playerId, count) {
 
     const allCards = game.rooms.card_sets?.cards ?? [];
 
-    // Karty już w ręce
-    const currentHand = await tx.player_hands.findMany({
-        where: { game_id: gameId, player_id: playerId }
+    // Karty w rękach WSZYSTKICH graczy tej gry (żadna karta nie może być u dwóch graczy naraz)
+    const allHands = await tx.player_hands.findMany({
+        where: { game_id: gameId }
     });
-    const inHand = new Set(currentHand.map(h => h.card_id));
+    const inAnyHand = new Set(allHands.map(h => h.card_id));
 
-    // Karty użyte w historii tej gry
+    // Karty w ręce tego gracza (podzbiór inAnyHand, potrzebny do fallbacku)
+    const inMyHand = new Set(allHands.filter(h => h.player_id === playerId).map(h => h.card_id));
+
+    // Karty użyte w historii tej gry przez tego gracza
     const history = await tx.player_card_history.findMany({
         where: { game_id: gameId, player_id: playerId }
     });
-    history.forEach(h => inHand.add(h.card_id));
+    const inHistory = new Set(history.map(h => h.card_id));
 
-    const available = allCards.filter(c => !inHand.has(c.id));
-    const shuffled = available.sort(() => Math.random() - 0.5);
-    const toDeal = shuffled.slice(0, count);
+    // Preferuj karty których gracz nie widział i które nie są u nikogo w ręce
+    let available = allCards.filter(c => !inAnyHand.has(c.id) && !inHistory.has(c.id));
+
+    // Fallback 1: wyczerpano nowe karty — pozwól na karty z historii, ale nie z czyjejś ręki
+    if (available.length < count) {
+        available = allCards.filter(c => !inAnyHand.has(c.id));
+    }
+
+    // Fallback 2: wszystkie karty są w rękach — pozwól na karty z cudzych rąk (mała talia)
+    if (available.length < count) {
+        console.log(`[DrawCards] pool exhausted for player ${playerId}, recycling from other hands`);
+        available = allCards.filter(c => !inMyHand.has(c.id));
+    }
+
+    // Fisher-Yates shuffle
+    for (let i = available.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [available[i], available[j]] = [available[j], available[i]];
+    }
+    const toDeal = available.slice(0, count);
 
     for (const card of toDeal) {
         await tx.player_hands.create({
@@ -53,8 +75,10 @@ module.exports = (io, socket) => {
 
     socket.on('connect_to_game', async ({ game_id }) => {
         try {
-            if (socket.game_id)
+            // Jeśli już w INNEJ grze — odrzuć
+            if (socket.game_id && socket.game_id !== game_id)
                 return socket.emit('error', { message: 'Nie można dołączyć do więcej niż jednej gry naraz' });
+            // Jeśli już w tej samej grze — idempotent: odśwież stan (nie błąd)
 
             const user_id = socket.user.id;
 
@@ -92,7 +116,10 @@ module.exports = (io, socket) => {
                     current_round: game.current_round,
                 },
                 round_state: currentRound,
-                hand: hand.map(h => h.cards),
+                hand: hand.map(h => {
+                    const { image_data, ...card } = h.cards;
+                    return { ...card, image_url: `/api/cards/${h.cards.id}/image` };
+                }),
                 player_id: player.id,
                 scores: scores.map(s => ({
                     player_id: s.player_id,
@@ -104,6 +131,7 @@ module.exports = (io, socket) => {
             socket.player_id = player.id;
             socket.game_id = game_id;
             socket.join(game_id);
+            socket.join(`player:${player.id}`); // per-player room do hand_updated
             console.log(`Gracz ${socket.user.login} dołączył do gry ${game_id}`);
         } catch (err) {
             console.error(err);
@@ -152,6 +180,12 @@ module.exports = (io, socket) => {
                 prompt,
                 narrator_player_id: socket.player_id
             });
+            startPhaseTimer(io, socket.game_id, 'submitting',
+                () => botOrchestrator.handleSubmittingExpiry(io, socket.game_id));
+
+            // Boty-gracze przesyłają karty asynchronicznie
+            botOrchestrator.handleBotSubmissions(io, socket.game_id, round.id, prompt)
+                .catch(err => console.error('[Bot] handleBotSubmissions error:', err));
         } catch (err) {
             console.error(err);
             socket.emit('error', { message: 'Błąd podczas przesyłania hasła' });
@@ -218,10 +252,20 @@ module.exports = (io, socket) => {
                 });
 
                 const shuffledCards = allSubmissions
-                    .map(s => ({ submission_id: s.id, card: s.cards }))
+                    .map(s => {
+                        const { image_data, ...card } = s.cards;
+                        return { submission_id: s.id, player_id: s.player_id, card: { ...card, image_url: `/api/cards/${s.cards.id}/image` } };
+                    })
                     .sort(() => Math.random() - 0.5);
 
                 io.to(socket.game_id).emit('start_voting', { cards: shuffledCards });
+                startPhaseTimer(io, socket.game_id, 'voting',
+                    () => botOrchestrator.handleVotingExpiry(io, socket.game_id));
+
+                // Boty głosują asynchronicznie
+                botOrchestrator.handleBotVotes(
+                    io, socket.game_id, round, allSubmissions, round.games.rooms.room_players
+                ).catch(err => console.error('[Bot] handleBotVotes error:', err));
             }
         } catch (err) {
             console.error(err);
@@ -350,13 +394,25 @@ async function _endRound(io, gameId, round, allPlayers) {
         return totals;
     });
 
-    // Uzupełnij ręce graczy (dociągnij 1 kartę każdy)
+    // Uzupełnij ręce graczy (dociągnij 1 kartę każdy) i wyślij zaktualizowane ręce
+    // Nie używamy transakcji — zbyt wiele zagnieżdżonych zapytań przekracza timeout 5s
     try {
-        await prisma.$transaction(async (tx) => {
-            for (const player of allPlayers) {
-                await drawCards(tx, gameId, player.id, 1);
-            }
-        });
+        for (const player of allPlayers) {
+            await drawCards(prisma, gameId, player.id, 1);
+        }
+        // Wyślij każdemu graczowi jego aktualną rękę (oddzielny event per-gracz)
+        for (const player of allPlayers) {
+            const hand = await prisma.player_hands.findMany({
+                where: { game_id: gameId, player_id: player.id },
+                include: { cards: true }
+            });
+            io.to(`player:${player.id}`).emit('hand_updated', {
+                hand: hand.map(h => {
+                    const { image_data, ...card } = h.cards;
+                    return { ...card, image_url: `/api/cards/${h.cards.id}/image` };
+                })
+            });
+        }
     } catch (err) {
         console.error('Błąd dobierania kart:', err);
     }
@@ -377,6 +433,7 @@ async function _endRound(io, gameId, round, allPlayers) {
     const gameOver = isGameOver(game.rooms, updatedTotals);
 
     if (gameOver || (game.rooms.end_condition === 'rounds' && game.current_round >= game.rooms.round_limit)) {
+        clearPhaseTimer(gameId);
         // Zakończ grę
         await prisma.$transaction(async (tx) => {
             await tx.games.update({
@@ -407,7 +464,7 @@ async function _endRound(io, gameId, round, allPlayers) {
                     data: { rank: i + 1 }
                 });
 
-                const isWinner = gs.score === maxScore && i === 0;
+                const isWinner = gs.score === maxScore; // remis = współdzielone zwycięstwo
                 const existingStat = await tx.user_stats.findFirst({ where: { user_id: userId } });
                 if (existingStat) {
                     await tx.user_stats.update({
@@ -415,7 +472,8 @@ async function _endRound(io, gameId, round, allPlayers) {
                         data: {
                             games_played: { increment: 1 },
                             games_won: { increment: isWinner ? 1 : 0 },
-                            total_points: { increment: gs.score }
+                            total_points: { increment: gs.score },
+                            coins: { increment: gs.score }
                         }
                     });
                 } else {
@@ -424,7 +482,8 @@ async function _endRound(io, gameId, round, allPlayers) {
                             user_id: userId,
                             games_played: 1,
                             games_won: isWinner ? 1 : 0,
-                            total_points: gs.score
+                            total_points: gs.score,
+                            coins: gs.score
                         }
                     });
                 }
@@ -435,11 +494,10 @@ async function _endRound(io, gameId, round, allPlayers) {
             round_id: round.id,
             scores: roundResultScores,
             narrator_submission_id: allSubmissions.find(s => s.is_narrator_card)?.id,
-            submissions: allSubmissions.map(s => ({
-                submission_id: s.id,
-                player_id: s.player_id,
-                card: s.cards
-            })),
+            submissions: allSubmissions.map(s => {
+                const { image_data, ...card } = s.cards;
+                return { submission_id: s.id, player_id: s.player_id, card: { ...card, image_url: `/api/cards/${s.cards.id}/image` } };
+            }),
             votes: allVotes
         });
 
@@ -487,4 +545,18 @@ async function _endRound(io, gameId, round, allPlayers) {
         narrator_player_id: nextNarrator.id,
         status: 'prompting'
     });
+    startPhaseTimer(io, gameId, 'prompting',
+        () => botOrchestrator.handlePromptingExpiry(io, gameId));
+
+    // Jeśli nowy narrator to bot, od razu generuje hasło
+    const newRound = await prisma.rounds.findFirst({
+        where: { game_id: gameId, round_number: newRoundNumber }
+    });
+    if (newRound) {
+        botOrchestrator.handleNarratorIfBot(io, gameId, newRound)
+            .catch(err => console.error('[Bot] handleNarratorIfBot error:', err));
+    }
 }
+
+// Eksportujemy _endRound dla botOrchestrator (lazy require, brak circular dep)
+module.exports._endRound = _endRound;

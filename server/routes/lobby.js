@@ -3,6 +3,8 @@ const router = express.Router();
 const prisma = require('../config/db');
 const auth = require('../middleware/auth');
 const { getIo } = require('../lib/socketBus');
+const { startPhaseTimer } = require('../lib/gameTimer');
+const botOrchestrator = require('../lib/botOrchestrator');
 
 const HAND_SIZE = 6; // karty na rękę na początku gry
 
@@ -40,9 +42,12 @@ async function dealCards(gameId, playerId, count, usedCardIds = []) {
 
     const available = allCards.filter(c => !existingHandIds.has(c.id));
 
-    // Przetasuj i weź potrzebną liczbę
-    const shuffled = available.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    // Przetasuj (Fisher-Yates) i weź potrzebną liczbę
+    for (let i = available.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [available[i], available[j]] = [available[j], available[i]];
+    }
+    return available.slice(0, count);
 }
 
 // Pomocnik budujący DTO gracza dla frontendu
@@ -61,6 +66,10 @@ router.post('/create', auth, async (req, res) => {
     const { max_players = 6, end_condition = 'points', point_limit = 30, round_limit = null } = req.body;
     const userId = req.user.id;
 
+    if (end_condition === 'rounds' && (round_limit === null || round_limit < 1)) {
+        return res.status(400).json({ error: 'Tryb rund wymaga minimum 1 rundy' });
+    }
+
     try {
         // Generuj unikalny kod (ponów jeśli kolizja)
         let code;
@@ -73,12 +82,14 @@ router.post('/create', auth, async (req, res) => {
         }
         if (!code) return res.status(500).json({ error: 'Nie można wygenerować kodu pokoju' });
 
-        // Użyj domyślnego zestawu kart jeśli jest (lub pierwszego dostępnego)
+        // Użyj domyślnego zestawu kart — preferuj "Dixit Classic", fallback na pierwszy dostępny
         const defaultSetId = process.env.DEFAULT_CARD_SET_ID || null;
         let activeSetId = defaultSetId;
         if (!activeSetId) {
-            const firstSet = await prisma.card_sets.findFirst();
-            activeSetId = firstSet?.id ?? null;
+            const preferred = await prisma.card_sets.findFirst({ where: { name: 'Dixit Classic' } });
+            const fallback = preferred ?? await prisma.card_sets.findFirst();
+            activeSetId = fallback?.id ?? null;
+            console.log('[Lobby] create activeSetId:', activeSetId, 'name:', (preferred ?? fallback)?.name);
         }
 
         // Utwórz pokój i dodaj hosta jako room_player w jednej transakcji
@@ -121,14 +132,16 @@ router.post('/create', auth, async (req, res) => {
 
 // POST /api/lobby/join
 router.post('/join', auth, async (req, res) => {
-    const { roomCode } = req.body;
+    // FE wysyła { code } (lobbyApi.ts), backend histocyznie oczekiwał { roomCode }
+    const { roomCode, code } = req.body;
+    const roomCodeValue = (roomCode || code)?.toUpperCase();
     const userId = req.user.id;
 
-    if (!roomCode) return res.status(400).json({ error: 'Brak kodu pokoju' });
+    if (!roomCodeValue) return res.status(400).json({ error: 'Brak kodu pokoju' });
 
     try {
         const room = await prisma.rooms.findUnique({
-            where: { code: roomCode.toUpperCase() },
+            where: { code: roomCodeValue },
             include: { room_players: { include: { users: true } } }
         });
 
@@ -177,13 +190,13 @@ router.post('/join', auth, async (req, res) => {
 
 // POST /api/lobby/start
 router.post('/start', auth, async (req, res) => {
-    const { roomCode } = req.body;
+    const { roomCode, settings } = req.body;
     const userId = req.user.id;
 
     if (!roomCode) return res.status(400).json({ error: 'Brak kodu pokoju' });
 
     try {
-        const room = await prisma.rooms.findUnique({
+        let room = await prisma.rooms.findUnique({
             where: { code: roomCode.toUpperCase() },
             include: {
                 room_players: { include: { users: true } },
@@ -198,6 +211,21 @@ router.post('/start', auth, async (req, res) => {
             return res.status(400).json({ error: 'Potrzeba minimum 3 graczy' });
         if (!room.card_sets || room.card_sets.cards.length === 0)
             return res.status(400).json({ error: 'Brak kart w wybranym zestawie. Uruchom seed.' });
+
+        // Zaktualizuj ustawienia pokoju jeśli przesłane przy starcie
+        if (settings) {
+            const endCondition = settings.endCondition ?? room.end_condition;
+            const endLimit = settings.endLimit ?? null;
+            await prisma.rooms.update({
+                where: { id: room.id },
+                data: {
+                    end_condition: endCondition,
+                    point_limit: endCondition === 'points' ? endLimit : room.point_limit,
+                    round_limit: endCondition === 'rounds' ? endLimit : room.round_limit,
+                }
+            });
+            room = { ...room, end_condition: endCondition, round_limit: endCondition === 'rounds' ? endLimit : room.round_limit, point_limit: endCondition === 'points' ? endLimit : room.point_limit };
+        }
 
         const allCards = room.card_sets.cards;
         const players = room.room_players;
@@ -219,12 +247,18 @@ router.post('/start', auth, async (req, res) => {
                 });
             }
 
-            // Rozdaj karty (HAND_SIZE kart na gracza)
-            let cardPool = [...allCards].sort(() => Math.random() - 0.5);
+            // Rozdaj karty (HAND_SIZE kart na gracza) — Fisher-Yates shuffle
+            let cardPool = [...allCards];
+            for (let i = cardPool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [cardPool[i], cardPool[j]] = [cardPool[j], cardPool[i]];
+            }
+            // Gdy kart za mało (np. 22 karty, 5 graczy × 6 = 30), rozdaj równo
+            const fairHandSize = Math.min(HAND_SIZE, Math.floor(allCards.length / players.length));
             const usedCardIds = new Set();
 
             for (const player of players) {
-                const hand = cardPool.filter(c => !usedCardIds.has(c.id)).slice(0, HAND_SIZE);
+                const hand = cardPool.filter(c => !usedCardIds.has(c.id)).slice(0, fairHandSize);
                 hand.forEach(c => usedCardIds.add(c.id));
 
                 for (const card of hand) {
@@ -234,9 +268,10 @@ router.post('/start', auth, async (req, res) => {
                 }
             }
 
-            // Wybierz pierwszego narratora (losowo)
-            const narratorIndex = Math.floor(Math.random() * players.length);
-            const firstNarrator = players[narratorIndex];
+            // Hotfix: pierwszy narrator zawsze człowiek (boty nie mogą zacząć)
+            const humanPlayers = players.filter(p => !p.is_bot);
+            const narratorPool = humanPlayers.length > 0 ? humanPlayers : players;
+            const firstNarrator = narratorPool[Math.floor(Math.random() * narratorPool.length)];
 
             // Utwórz pierwszą rundę
             await tx.rounds.create({
@@ -261,6 +296,16 @@ router.post('/start', auth, async (req, res) => {
         const io = getIo();
         if (io) {
             io.to(`lobby:${room.code}`).emit('game_started', { gameId });
+            startPhaseTimer(io, gameId, 'prompting',
+                () => botOrchestrator.handlePromptingExpiry(io, gameId));
+
+            // Jeśli narrator rundy 1 to bot — zadziała dopiero po hotfixie (narrator = człowiek),
+            // ale zostawiamy trigger na wypadek gdyby wszyscy gracze byli botami
+            const firstRound = await prisma.rounds.findFirst({ where: { game_id: gameId } });
+            if (firstRound) {
+                botOrchestrator.handleNarratorIfBot(io, gameId, firstRound)
+                    .catch(err => console.error('[Bot] round 1 narrator error:', err));
+            }
         }
 
         return res.status(200).json({ gameId });
@@ -318,13 +363,12 @@ router.post('/add-bot', auth, async (req, res) => {
     }
 });
 
-// GET /api/lobby/default-settings
+// GET /api/lobby/default-settings — camelCase dla FE (LobbySettings interface)
 router.get('/default-settings', auth, (req, res) => {
     return res.json({
-        max_players: 6,
-        end_condition: 'points',
-        point_limit: 30,
-        round_limit: null
+        maxPlayers: 6,
+        endCondition: 'points',
+        endLimit: 30
     });
 });
 

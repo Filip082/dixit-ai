@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 const multer = require('multer');
 const authenticateToken = require('../middleware/auth');
 const prisma = require('../config/db');
@@ -104,10 +105,29 @@ router.post('/canvas', authenticateToken, async (req, res) => {
 router.get('/:id/image', async (req, res) => {
     try {
         const card = await prisma.cards.findUnique({ where: { id: req.params.id } });
-        if (!card || !card.image_data) return res.status(404).json({ error: 'Brak obrazka' });
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        return res.send(card.image_data);
+        if (!card) return res.status(404).json({ error: 'Karta nie istnieje' });
+
+        // Priorytet: binarne dane z DB
+        if (card.image_data) {
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.send(card.image_data);
+        }
+
+        // Fallback: absolutny URL (redirect)
+        if (card.image_url?.startsWith('http')) {
+            return res.redirect(302, card.image_url);
+        }
+
+        // Fallback: relatywna ścieżka do pliku statycznego (np. /Karty/KartaNr1.png)
+        if (card.image_url) {
+            const filePath = path.join(__dirname, '../public', card.image_url);
+            return res.sendFile(filePath, err => {
+                if (err) res.status(404).json({ error: 'Brak danych obrazka' });
+            });
+        }
+
+        return res.status(404).json({ error: 'Brak danych obrazka' });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }
